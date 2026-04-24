@@ -193,12 +193,13 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Google Drive Sync"
+                android:text="Backup Local"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="8dp" />
 
+            <!-- CLOUD FEATURES DISABLED
             <TextView
                 android:id="@+id/tvGoogleStatus"
                 android:layout_width="wrap_content"
@@ -207,8 +208,10 @@
                 android:textSize="14sp"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="12dp" />
+            -->
 
-            <!-- Sign-In Button -->
+            <!-- CLOUD FEATURES DISABLED - FASE 1: IA 100% LOCAL
+            Sign-In Button de Google requiere play-services-auth
             <com.google.android.gms.common.SignInButton
                 android:id="@+id/signInButton"
                 android:layout_width="wrap_content"
@@ -216,7 +219,7 @@
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="8dp" />
 
-            <!-- User Profile (Visible when signed in) -->
+            User Profile (Visible when signed in)
             <LinearLayout
                 android:id="@+id/layoutGoogleProfile"
                 android:layout_width="match_parent"
@@ -252,7 +255,7 @@
 
             </LinearLayout>
 
-            <!-- Model Download Progress -->
+            Model Download Progress
             <ProgressBar
                 android:id="@+id/progressBarModelDownload"
                 android:layout_width="match_parent"
@@ -270,7 +273,7 @@
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="12dp" />
 
-            <!-- Sync Buttons -->
+            Sync Buttons
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -295,6 +298,17 @@
                     android:visibility="gone" />
 
             </LinearLayout>
+            -->
+
+            <!-- Info: Modo 100% Offline -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🟢 Modo 100% Offline - IA Local"
+                android:textSize="12sp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="8dp"
+                android:textColor="?attr/colorPrimary" />
 
         </LinearLayout>
 
