@@ -32,13 +32,12 @@ val releaseKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
 
 android {
     namespace = "com.ffai.assistant"
-    compileSdk = 33
-    buildToolsVersion = "33.0.2"
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.ffai.assistant"
         minSdk = 24
-        targetSdk = 33
+        targetSdk = 34
         
         // Optimización para ensemble 120MB en A21S
         multiDexEnabled = true
@@ -93,11 +92,6 @@ android {
             reset()
             include("armeabi-v7a", "arm64-v8a") // Samsung A21S = arm64-v8a
             isUniversalApk = false // No generar APK universal, solo específicos
-        }
-        density {
-            isEnable = true
-            reset()
-            include("hdpi", "xhdpi") // A21S = 720x1600 (hdpi/xhdpi)
         }
     }
     

@@ -187,6 +187,13 @@ jobs:
     - name: Report Build Status
       if: always()
       run: |
+        echo "================================"
         echo "Build completed with status: ${{ job.status }}"
         echo "APK Path: ${{ steps.apk_info.outputs.apk_path }}"
-        echo "APK Size: $(( ${{ steps.apk_info.outputs.apk_size }} / 1024 / 1024 )) MB"
+        APK_SIZE="${{ steps.apk_info.outputs.apk_size }}"
+        if [ -n "$APK_SIZE" ] && [ "$APK_SIZE" -gt 0 ]; then
+          echo "APK Size: $(( APK_SIZE / 1024 / 1024 )) MB"
+        else
+          echo "APK Size: N/A (build may have failed)"
+        fi
+        echo "================================"
