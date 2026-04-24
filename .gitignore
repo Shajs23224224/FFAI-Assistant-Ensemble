@@ -64,5 +64,3 @@ tools/jadx.zip
 tools/jadx/lib/jadx-1.5.2-all.jar
 *.zip
 *.tar.gz
-
-tactical_ai/
