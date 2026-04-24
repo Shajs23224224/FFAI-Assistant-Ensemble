@@ -32,12 +32,12 @@ val releaseKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
 
 android {
     namespace = "com.ffai.assistant"
-    compileSdk = 34
+    compileSdk = 33
 
     defaultConfig {
         applicationId = "com.ffai.assistant"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 33
         
         // Optimización para ensemble 120MB en A21S
         multiDexEnabled = true
@@ -108,7 +108,7 @@ android {
     // Packaging options optimizado
     packaging {
         resources {
-            excludes += [
+            excludes += setOf(
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE",
                 "META-INF/LICENSE.txt",
@@ -118,7 +118,7 @@ android {
                 "META-INF/*.kotlin_module",
                 "META-INF/INDEX.LIST",
                 "META-INF/io.netty.versions.properties"
-            ]
+            )
         }
         jniLibs {
             useLegacyPackaging = false
@@ -132,11 +132,11 @@ android {
         checkReleaseBuilds = false
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "21"
+        jvmTarget = "17"
     }
     buildFeatures {
         viewBinding = true
