@@ -3,365 +3,242 @@ package com.ffai.assistant.cloud
 import android.content.Context
 import android.content.SharedPreferences
 import com.ffai.assistant.utils.Logger
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
-import com.google.api.client.http.FileContent
-import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.drive.Drive
-import com.google.api.services.drive.model.File
-import com.google.api.services.drive.model.FileList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.IOException
-import java.util.Collections
+import java.io.File
 
 /**
- * Gestor de sincronización con Google Drive.
- * Maneja subida/descarga de modelos, checkpoints y datos de aprendizaje.
+ * IA 100% LOCAL - Sistema de backup local (sin Google Drive).
+ * 
+ * Este gestor maneja almacenamiento local de modelos, checkpoints y datos.
+ * Todos los archivos se guardan en el dispositivo en /Android/data/com.ffai.assistant/files/
+ * 
+ * Características:
+ * - Backup local automático
+ * - Sin dependencias de cloud
+ * - Optimizado para Samsung A21S
+ * - Sin conexión a internet requerida
  */
-class DriveSyncManager(private val context: Context) {
+class LocalSyncManager(private val context: Context) {
 
     companion object {
-        const val PREFS_NAME = "drive_sync_prefs"
-        const val KEY_FOLDER_ID = "ffai_folder_id"
-        const val KEY_LAST_SYNC = "last_sync_time"
-        const val FFAI_ROOT_FOLDER = "FFAI"
+        const val PREFS_NAME = "local_sync_prefs"
+        const val KEY_LAST_BACKUP = "last_backup_time"
         
         const val FOLDER_MODELS = "models"
         const val FOLDER_CHECKPOINTS = "checkpoints"
         const val FOLDER_DATA = "data"
         const val FOLDER_SESSIONS = "sessions"
+        const val FOLDER_BACKUP = "backup"
         
-        // Límites de Drive API
-        const val MAX_FILE_SIZE_MB = 100  // 100MB para archivos grandes
+        const val MAX_FILE_SIZE_MB = 100
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private var driveService: Drive? = null
-    private val folderIds = mutableMapOf<String, String>()
+    private val baseDir: File = context.getExternalFilesDir(null) ?: context.filesDir
     
     var syncProgressCallback: ((SyncProgress) -> Unit)? = null
 
-    /**
-     * Inicializa el servicio de Drive con las credenciales del usuario.
-     * Debe llamarse después de que el usuario haya iniciado sesión.
-     */
-    suspend fun initialize(authToken: String): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val httpTransport = GoogleNetHttpTransport.newTrustedTransport()
-            val jsonFactory = GsonFactory.getDefaultInstance()
-            
-            val credential = com.google.api.client.googleapis.auth.oauth2.GoogleCredential()
-                .setAccessToken(authToken)
-            
-            driveService = Drive.Builder(httpTransport, jsonFactory, credential)
-                .setApplicationName("FFAI Assistant")
-                .build()
-            
-            // Verificar conectividad y crear estructura de carpetas
-            ensureFolderStructure()
-            
-            Logger.i("DriveSyncManager: Inicializado exitosamente")
-            true
-        } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error de inicialización", e)
-            false
-        }
+    init {
+        // Crear estructura de carpetas local
+        createLocalStructure()
     }
 
-    /**
-     * Crea la estructura de carpetas en Drive si no existe.
-     */
-    private suspend fun ensureFolderStructure(): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val drive = driveService ?: return@withContext false
-            
-            // Buscar o crear carpeta raíz FFAI
-            val rootFolderId = getOrCreateFolder(FFAI_ROOT_FOLDER, "root")
-                ?: return@withContext false
-            
-            prefs.edit().putString(KEY_FOLDER_ID, rootFolderId).apply()
-            folderIds["root"] = rootFolderId
-            
-            // Crear subcarpetas
-            val subfolders = listOf(FOLDER_MODELS, FOLDER_CHECKPOINTS, FOLDER_DATA, FOLDER_SESSIONS)
-            subfolders.forEach { folderName ->
-                val folderId = getOrCreateFolder(folderName, rootFolderId)
-                if (folderId != null) {
-                    folderIds[folderName] = folderId
-                }
+    private fun createLocalStructure() {
+        val folders = listOf(FOLDER_MODELS, FOLDER_CHECKPOINTS, FOLDER_DATA, FOLDER_SESSIONS, FOLDER_BACKUP)
+        folders.forEach { folderName ->
+            val folder = File(baseDir, folderName)
+            if (!folder.exists()) {
+                folder.mkdirs()
+                Logger.i("LocalSyncManager", "Carpeta local creada: ${folder.absolutePath}")
             }
-            
-            Logger.i("DriveSyncManager: Estructura de carpetas lista")
-            true
-        } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error creando estructura", e)
-            false
+        }
+    }
+
+    fun getLocalFolder(folderName: String): File {
+        return File(baseDir, folderName).apply {
+            if (!exists()) mkdirs()
         }
     }
 
     /**
-     * Busca una carpeta por nombre en un directorio padre, o la crea si no existe.
+     * Copia un archivo a la carpeta local de backup.
      */
-    private fun getOrCreateFolder(name: String, parentId: String): String? {
-        val drive = driveService ?: return null
-        
-        return try {
-            // Buscar carpeta existente
-            val query = "mimeType='application/vnd.google-apps.folder' and name='$name' and '$parentId' in parents and trashed=false"
-            val result: FileList = drive.files().list()
-                .setQ(query)
-                .setSpaces("drive")
-                .setFields("files(id, name)")
-                .execute()
-            
-            if (result.files.isNotEmpty()) {
-                result.files[0].id
-            } else {
-                // Crear nueva carpeta
-                val metadata = File().apply {
-                    setName(name)
-                    setMimeType("application/vnd.google-apps.folder")
-                    setParents(Collections.singletonList(parentId))
-                }
-                
-                val folder = drive.files().create(metadata).setFields("id").execute()
-                Logger.i("DriveSyncManager: Carpeta creada - $name (${folder.id})")
-                folder.id
-            }
-        } catch (e: IOException) {
-            Logger.e("DriveSyncManager: Error con carpeta $name", e)
-            null
-        }
-    }
-
-    /**
-     * Sube un archivo a Drive.
-     * @param localFile Archivo local a subir
-     * @param folderName Nombre de la carpeta destino (models, checkpoints, data, sessions)
-     * @param customName Nombre opcional para el archivo en Drive (si es null, usa el nombre local)
-     * @return ID del archivo en Drive o null si falla
-     */
-    suspend fun uploadFile(
-        localFile: java.io.File,
+    suspend fun backupFile(
+        sourceFile: File,
         folderName: String = FOLDER_MODELS,
         customName: String? = null
     ): String? = withContext(Dispatchers.IO) {
         return@withContext try {
-            val drive = driveService ?: return@withContext null
-            val folderId = folderIds[folderName] ?: return@withContext null
+            val fileName = customName ?: sourceFile.name
+            val destFolder = getLocalFolder(folderName)
+            val destFile = File(destFolder, fileName)
             
-            val fileName = customName ?: localFile.name
-            val mimeType = getMimeType(fileName)
+            syncProgressCallback?.invoke(SyncProgress.Uploading(fileName, 0, sourceFile.length()))
             
-            syncProgressCallback?.invoke(SyncProgress.Uploading(fileName, 0, localFile.length()))
+            // Copiar archivo
+            sourceFile.copyTo(destFile, overwrite = true)
             
-            // Buscar archivo existente para reemplazarlo
-            val existingFile = findFileInFolder(fileName, folderId)
-            
-            if (existingFile != null) {
-                // Actualizar archivo existente
-                val fileContent = FileContent(mimeType, localFile)
-                drive.files().update(existingFile.id, null, fileContent).execute()
-                Logger.i("DriveSyncManager: Archivo actualizado - $fileName")
-                syncProgressCallback?.invoke(SyncProgress.UploadComplete(fileName, existingFile.id))
-                existingFile.id
-            } else {
-                // Crear nuevo archivo
-                val fileMetadata = File().apply {
-                    setName(fileName)
-                    setParents(Collections.singletonList(folderId))
-                }
-                
-                val fileContent = FileContent(mimeType, localFile)
-                val uploadedFile = drive.files().create(fileMetadata, fileContent)
-                    .setFields("id, name")
-                    .execute()
-                
-                Logger.i("DriveSyncManager: Archivo subido - ${uploadedFile.name} (${uploadedFile.id})")
-                syncProgressCallback?.invoke(SyncProgress.UploadComplete(fileName, uploadedFile.id))
-                uploadedFile.id
-            }
+            Logger.i("LocalSyncManager", "Archivo respaldado localmente: ${destFile.absolutePath}")
+            syncProgressCallback?.invoke(SyncProgress.UploadComplete(fileName, destFile.absolutePath))
+            destFile.absolutePath
         } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error subiendo archivo", e)
-            syncProgressCallback?.invoke(SyncProgress.Error("Upload failed: ${e.message}"))
+            Logger.e("LocalSyncManager", "Error respaldando archivo", e)
+            syncProgressCallback?.invoke(SyncProgress.Error("Backup failed: ${e.message}"))
             null
         }
     }
 
     /**
-     * Descarga un archivo desde Drive.
-     * @param fileId ID del archivo en Drive
-     * @param destinationFile Archivo local donde guardar
-     * @return true si éxito
+     * Restaura un archivo desde backup local.
      */
-    suspend fun downloadFile(fileId: String, destinationFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val drive = driveService ?: return@withContext false
-            
-            syncProgressCallback?.invoke(SyncProgress.Downloading(fileId, 0, 0))
-            
-            drive.files().get(fileId).executeMediaAndDownloadTo(destinationFile.outputStream())
-            
-            Logger.i("DriveSyncManager: Archivo descargado - ${destinationFile.name}")
-            syncProgressCallback?.invoke(SyncProgress.DownloadComplete(destinationFile.name, destinationFile.length()))
-            true
-        } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error descargando archivo", e)
-            syncProgressCallback?.invoke(SyncProgress.Error("Download failed: ${e.message}"))
-            false
-        }
-    }
-
-    /**
-     * Descarga un archivo por nombre desde una carpeta específica.
-     */
-    suspend fun downloadFileByName(
+    suspend fun restoreFile(
         fileName: String,
         folderName: String = FOLDER_MODELS,
-        destinationFile: java.io.File
+        destinationFile: File
     ): Boolean = withContext(Dispatchers.IO) {
-        val folderId = folderIds[folderName] ?: return@withContext false
-        val file = findFileInFolder(fileName, folderId)
-        
-        return@withContext if (file != null) {
-            downloadFile(file.id, destinationFile)
-        } else {
-            Logger.w("DriveSyncManager: Archivo no encontrado - $fileName")
-            false
-        }
-    }
-
-    /**
-     * Lista archivos en una carpeta.
-     */
-    suspend fun listFiles(folderName: String = FOLDER_MODELS): List<DriveFile> = withContext(Dispatchers.IO) {
         return@withContext try {
-            val drive = driveService ?: return@withContext emptyList()
-            val folderId = folderIds[folderName] ?: return@withContext emptyList()
+            val sourceFolder = getLocalFolder(folderName)
+            val sourceFile = File(sourceFolder, fileName)
             
-            val query = "'$folderId' in parents and trashed=false"
-            val result: FileList = drive.files().list()
-                .setQ(query)
-                .setSpaces("drive")
-                .setFields("files(id, name, size, modifiedTime, mimeType)")
-                .execute()
-            
-            result.files.map { file ->
-                DriveFile(
-                    id = file.id,
-                    name = file.name,
-                    size = file.getSize() ?: 0,
-                    modifiedTime = file.modifiedTime?.value ?: 0,
-                    mimeType = file.mimeType
-                )
+            if (!sourceFile.exists()) {
+                Logger.w("LocalSyncManager", "Archivo no encontrado en backup: $fileName")
+                return@withContext false
             }
-        } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error listando archivos", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Busca un archivo por nombre en una carpeta.
-     */
-    private fun findFileInFolder(fileName: String, folderId: String): File? {
-        val drive = driveService ?: return null
-        
-        return try {
-            val query = "name='$fileName' and '$folderId' in parents and trashed=false"
-            val result: FileList = drive.files().list()
-                .setQ(query)
-                .setSpaces("drive")
-                .setFields("files(id, name, modifiedTime)")
-                .execute()
             
-            result.files.firstOrNull()
-        } catch (e: IOException) {
-            Logger.e("DriveSyncManager: Error buscando archivo", e)
-            null
-        }
-    }
-
-    /**
-     * Elimina un archivo de Drive.
-     */
-    suspend fun deleteFile(fileId: String): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val drive = driveService ?: return@withContext false
-            drive.files().delete(fileId).execute()
-            Logger.i("DriveSyncManager: Archivo eliminado - $fileId")
+            syncProgressCallback?.invoke(SyncProgress.Downloading(fileName, 0, sourceFile.length()))
+            
+            sourceFile.copyTo(destinationFile, overwrite = true)
+            
+            Logger.i("LocalSyncManager", "Archivo restaurado: ${destinationFile.absolutePath}")
+            syncProgressCallback?.invoke(SyncProgress.DownloadComplete(fileName, destinationFile.length()))
             true
         } catch (e: Exception) {
-            Logger.e("DriveSyncManager: Error eliminando archivo", e)
+            Logger.e("LocalSyncManager", "Error restaurando archivo", e)
+            syncProgressCallback?.invoke(SyncProgress.Error("Restore failed: ${e.message}"))
             false
         }
     }
 
     /**
-     * Verifica si existe un archivo en Drive.
+     * Lista archivos en carpeta local.
      */
-    suspend fun fileExists(fileName: String, folderName: String = FOLDER_MODELS): Boolean = withContext(Dispatchers.IO) {
-        val folderId = folderIds[folderName] ?: return@withContext false
-        return@withContext findFileInFolder(fileName, folderId) != null
+    fun listLocalFiles(folderName: String = FOLDER_MODELS): List<LocalFile> {
+        val folder = getLocalFolder(folderName)
+        return folder.listFiles()?.map { file ->
+            LocalFile(
+                path = file.absolutePath,
+                name = file.name,
+                size = file.length(),
+                modifiedTime = file.lastModified()
+            )
+        } ?: emptyList()
     }
 
     /**
-     * Obtiene la fecha de última sincronización.
+     * Verifica si existe archivo local.
      */
-    fun getLastSyncTime(): Long {
-        return prefs.getLong(KEY_LAST_SYNC, 0)
+    fun localFileExists(fileName: String, folderName: String = FOLDER_MODELS): Boolean {
+        return File(getLocalFolder(folderName), fileName).exists()
     }
 
     /**
-     * Actualiza la fecha de última sincronización.
+     * Elimina archivo local.
      */
-    fun updateLastSyncTime() {
-        prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
-    }
-
-    /**
-     * Obtiene el MIME type basado en la extensión del archivo.
-     */
-    private fun getMimeType(fileName: String): String {
-        return when {
-            fileName.endsWith(".tflite") -> "application/octet-stream"
-            fileName.endsWith(".pth") -> "application/octet-stream"
-            fileName.endsWith(".pt") -> "application/octet-stream"
-            fileName.endsWith(".db") -> "application/x-sqlite3"
-            fileName.endsWith(".json") -> "application/json"
-            fileName.endsWith(".zip") -> "application/zip"
-            else -> "application/octet-stream"
+    suspend fun deleteLocalFile(fileName: String, folderName: String = FOLDER_MODELS): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val file = File(getLocalFolder(folderName), fileName)
+            if (file.exists()) {
+                file.delete()
+                Logger.i("LocalSyncManager", "Archivo eliminado: $fileName")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Logger.e("LocalSyncManager", "Error eliminando archivo", e)
+            false
         }
     }
 
     /**
-     * Limpia recursos.
+     * Limpia backups antiguos (más de 7 días).
      */
-    fun cleanup() {
-        driveService = null
-        folderIds.clear()
+    suspend fun cleanupOldBackups(folderName: String = FOLDER_BACKUP, maxAgeDays: Int = 7): Int = withContext(Dispatchers.IO) {
+        val folder = getLocalFolder(folderName)
+        val cutoffTime = System.currentTimeMillis() - (maxAgeDays * 24 * 60 * 60 * 1000)
+        var deletedCount = 0
+        
+        folder.listFiles()?.forEach { file ->
+            if (file.lastModified() < cutoffTime) {
+                file.delete()
+                deletedCount++
+            }
+        }
+        
+        if (deletedCount > 0) {
+            Logger.i("LocalSyncManager", "Limpieza completada: $deletedCount archivos antiguos eliminados")
+        }
+        deletedCount
+    }
+
+    /**
+     * Obtiene fecha de último backup.
+     */
+    fun getLastBackupTime(): Long {
+        return prefs.getLong(KEY_LAST_BACKUP, 0)
+    }
+
+    /**
+     * Actualiza fecha de último backup.
+     */
+    fun updateLastBackupTime() {
+        prefs.edit().putLong(KEY_LAST_BACKUP, System.currentTimeMillis()).apply()
+    }
+
+    /**
+     * Obtiene espacio disponible en almacenamiento.
+     */
+    fun getAvailableSpace(): Long {
+        return baseDir.usableSpace
+    }
+
+    /**
+     * Obtiene tamaño total de backups.
+     */
+    fun getTotalBackupSize(): Long {
+        return listOf(FOLDER_MODELS, FOLDER_CHECKPOINTS, FOLDER_DATA, FOLDER_SESSIONS, FOLDER_BACKUP)
+            .sumOf { folderName ->
+                getLocalFolder(folderName).listFiles()?.sumOf { it.length() } ?: 0L
+            }
     }
 }
 
 /**
- * Representa un archivo en Google Drive.
+ * Representa un archivo local.
  */
-data class DriveFile(
-    val id: String,
+data class LocalFile(
+    val path: String,
     val name: String,
     val size: Long,
-    val modifiedTime: Long,
-    val mimeType: String?
+    val modifiedTime: Long
 )
 
 /**
- * Estados de progreso de sincronización.
+ * Estados de progreso de sincronización local.
  */
 sealed class SyncProgress {
     data class Uploading(val fileName: String, val bytesUploaded: Long, val totalBytes: Long) : SyncProgress()
-    data class UploadComplete(val fileName: String, val fileId: String) : SyncProgress()
-    data class Downloading(val fileId: String, val bytesDownloaded: Long, val totalBytes: Long) : SyncProgress()
+    data class UploadComplete(val fileName: String, val filePath: String) : SyncProgress()
+    data class Downloading(val fileName: String, val bytesDownloaded: Long, val totalBytes: Long) : SyncProgress()
     data class DownloadComplete(val fileName: String, val fileSize: Long) : SyncProgress()
     data class Error(val message: String) : SyncProgress()
     object SyncComplete : SyncProgress()
 }
+
+// Alias para compatibilidad - redirige a LocalSyncManager
+@Deprecated("Usar LocalSyncManager directamente", ReplaceWith("LocalSyncManager"))
+typealias DriveSyncManager = LocalSyncManager
+
+@Deprecated("Usar LocalFile", ReplaceWith("LocalFile"))
+typealias DriveFile = LocalFile

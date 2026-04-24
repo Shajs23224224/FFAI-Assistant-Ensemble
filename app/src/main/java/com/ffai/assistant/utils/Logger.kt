@@ -10,6 +10,40 @@ object Logger {
     
     var debugMode = false
     
+    // ============================================
+    // MÉTODOS CON TAG (para logs organizados por componente)
+    // ============================================
+    
+    fun d(tag: String, message: String) {
+        if (debugMode) {
+            Log.d(tag, message)
+        }
+    }
+    
+    fun i(tag: String, message: String) {
+        Log.i(tag, message)
+    }
+    
+    fun w(tag: String, message: String) {
+        Log.w(tag, message)
+    }
+    
+    fun w(tag: String, message: String, throwable: Throwable) {
+        Log.w(tag, message, throwable)
+    }
+    
+    fun e(tag: String, message: String, throwable: Throwable? = null) {
+        Log.e(tag, message, throwable)
+    }
+    
+    fun wtf(tag: String, message: String, throwable: Throwable? = null) {
+        Log.wtf(tag, message, throwable)
+    }
+    
+    // ============================================
+    // MÉTODOS SIN TAG (backward compatibility)
+    // ============================================
+    
     fun d(message: String) {
         if (debugMode) {
             Log.d(Constants.DEBUG_TAG, message)

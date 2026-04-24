@@ -23,8 +23,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Worker de sincronización en background con Google Drive.
- * Maneja backup de modelos, checkpoints y datos de aprendizaje.
+ * Worker de backup local (sin Google Drive).
+ * Maneja backup de modelos, checkpoints y datos de aprendizaje en almacenamiento local.
+ * IA 100% local - sin conexión a internet requerida.
  */
 class BackupWorker(
     context: Context,
@@ -39,143 +40,94 @@ class BackupWorker(
         const val KEY_SYNC_MODELS = "sync_models"
         const val KEY_SYNC_DATA = "sync_data"
         const val KEY_FORCE_SYNC = "force_sync"
-        const val KEY_AUTH_TOKEN = "auth_token"
         
         // Output data keys
         const val KEY_RESULT_SUCCESS = "result_success"
         const val KEY_RESULT_MESSAGE = "result_message"
-        const val KEY_FILES_UPLOADED = "files_uploaded"
-        const val KEY_FILES_DOWNLOADED = "files_downloaded"
+        const val KEY_FILES_BACKED_UP = "files_backed_up"
     }
 
-    private lateinit var driveSyncManager: DriveSyncManager
+    private lateinit var localSyncManager: LocalSyncManager
     private val context = applicationContext
 
     override suspend fun doWork(): Result {
-        Logger.i("BackupWorker: Iniciando sincronización")
-        
-        val authToken = inputData.getString(KEY_AUTH_TOKEN)
-        if (authToken.isNullOrEmpty()) {
-            Logger.e("BackupWorker: No hay token de autenticación")
-            return Result.failure(workDataOf(
-                KEY_RESULT_SUCCESS to false,
-                KEY_RESULT_MESSAGE to "No authentication token"
-            ))
-        }
+        Logger.i("BackupWorker", "Iniciando backup local")
         
         val syncModels = inputData.getBoolean(KEY_SYNC_MODELS, true)
         val syncData = inputData.getBoolean(KEY_SYNC_DATA, true)
         
         return try {
-            driveSyncManager = DriveSyncManager(context)
+            localSyncManager = LocalSyncManager(context)
             
-            // Inicializar Drive
-            val initialized = driveSyncManager.initialize(authToken)
-            if (!initialized) {
-                return Result.failure(workDataOf(
-                    KEY_RESULT_SUCCESS to false,
-                    KEY_RESULT_MESSAGE to "Failed to initialize Drive"
-                ))
-            }
+            var filesBackedUp = 0
             
-            var filesUploaded = 0
-            var filesDownloaded = 0
-            
-            // Sincronizar modelos
+            // Backup de modelos
             if (syncModels) {
-                val modelResult = syncModels()
-                filesUploaded += modelResult.first
-                filesDownloaded += modelResult.second
+                filesBackedUp += backupModels()
             }
             
-            // Sincronizar datos de aprendizaje
+            // Backup de datos de aprendizaje
             if (syncData) {
-                val dataResult = syncLearningData()
-                filesUploaded += dataResult.first
-                filesDownloaded += dataResult.second
+                filesBackedUp += backupLearningData()
             }
             
-            // Actualizar timestamp de última sincronización
-            driveSyncManager.updateLastSyncTime()
+            // Limpiar backups antiguos
+            localSyncManager.cleanupOldBackups()
             
-            val message = "Sync completed: $filesUploaded uploaded, $filesDownloaded downloaded"
-            Logger.i("BackupWorker: $message")
+            // Actualizar timestamp de último backup
+            localSyncManager.updateLastBackupTime()
+            
+            val message = "Backup local completado: $filesBackedUp archivos respaldados"
+            Logger.i("BackupWorker", message)
             
             Result.success(workDataOf(
                 KEY_RESULT_SUCCESS to true,
                 KEY_RESULT_MESSAGE to message,
-                KEY_FILES_UPLOADED to filesUploaded,
-                KEY_FILES_DOWNLOADED to filesDownloaded
+                KEY_FILES_BACKED_UP to filesBackedUp
             ))
             
         } catch (e: Exception) {
-            Logger.e("BackupWorker: Error en sincronización", e)
+            Logger.e("BackupWorker", "Error en backup local", e)
             Result.retry()
-        } finally {
-            driveSyncManager.cleanup()
         }
     }
 
     /**
-     * Sincroniza modelos con Drive.
-     * @return Pair(uploaded, downloaded)
+     * Backup de modelos locales.
+     * @return Número de archivos respaldados
      */
-    private suspend fun syncModels(): Pair<Int, Int> = withContext(Dispatchers.IO) {
-        var uploaded = 0
-        var downloaded = 0
+    private suspend fun backupModels(): Int = withContext(Dispatchers.IO) {
+        var backedUp = 0
         
         try {
             val modelDir = File(context.getExternalFilesDir(null), Constants.MODEL_DIR)
             
-            // Subir modelo actual si existe
+            // Backup modelo actual si existe
             val currentModel = File(modelDir, Constants.MODEL_CURRENT)
             if (currentModel.exists()) {
-                driveSyncManager.uploadFile(currentModel, DriveSyncManager.FOLDER_MODELS)
-                uploaded++
+                localSyncManager.backupFile(currentModel, LocalSyncManager.FOLDER_MODELS)
+                backedUp++
                 
-                // También subir como backup con timestamp
+                // También backup con timestamp
                 val timestamp = System.currentTimeMillis()
                 val backupName = "model_backup_${timestamp}.tflite"
-                driveSyncManager.uploadFile(currentModel, DriveSyncManager.FOLDER_MODELS, backupName)
-                uploaded++
-            }
-            
-            // Verificar si hay modelos nuevos en Drive para descargar
-            val remoteFiles = driveSyncManager.listFiles(DriveSyncManager.FOLDER_MODELS)
-            val manifestFile = remoteFiles.find { it.name == "manifest.json" }
-            
-            if (manifestFile != null) {
-                // Descargar y parsear manifest
-                val tempManifest = File(context.cacheDir, "temp_manifest.json")
-                if (driveSyncManager.downloadFile(manifestFile.id, tempManifest)) {
-                    // Verificar si hay modelo nuevo
-                    val currentModelId = remoteFiles.find { 
-                        it.name == Constants.MODEL_CURRENT 
-                    }?.id
-                    
-                    if (currentModelId != null && !currentModel.exists()) {
-                        // Descargar modelo desde Drive
-                        driveSyncManager.downloadFile(currentModelId, currentModel)
-                        downloaded++
-                    }
-                    tempManifest.delete()
-                }
+                localSyncManager.backupFile(currentModel, LocalSyncManager.FOLDER_BACKUP, backupName)
+                backedUp++
             }
             
         } catch (e: Exception) {
-            Logger.e("BackupWorker: Error sincronizando modelos", e)
+            Logger.e("BackupWorker", "Error en backup de modelos", e)
         }
         
-        Pair(uploaded, downloaded)
+        backedUp
     }
 
     /**
-     * Sincroniza datos de aprendizaje con Drive.
-     * @return Pair(uploaded, downloaded)
+     * Backup de datos de aprendizaje locales.
+     * @return Número de archivos respaldados
      */
-    private suspend fun syncLearningData(): Pair<Int, Int> = withContext(Dispatchers.IO) {
-        var uploaded = 0
-        var downloaded = 0
+    private suspend fun backupLearningData(): Int = withContext(Dispatchers.IO) {
+        var backedUp = 0
         
         try {
             // Comprimir base de datos SQLite
@@ -184,32 +136,18 @@ class BackupWorker(
                 val zipFile = File(context.cacheDir, "experiences_backup.zip")
                 compressFile(dbFile, zipFile)
                 
-                // Subir a Drive
-                driveSyncManager.uploadFile(zipFile, DriveSyncManager.FOLDER_DATA, "experiences_backup.zip")
-                uploaded++
+                // Backup local
+                localSyncManager.backupFile(zipFile, LocalSyncManager.FOLDER_DATA, "experiences_backup.zip")
+                backedUp++
                 
                 zipFile.delete()
             }
             
-            // Verificar si hay datos remotos para restaurar
-            val remoteFiles = driveSyncManager.listFiles(DriveSyncManager.FOLDER_DATA)
-            val remoteBackup = remoteFiles.find { it.name == "experiences_backup.zip" }
-            
-            if (remoteBackup != null && !dbFile.exists()) {
-                // Descargar y restaurar
-                val tempZip = File(context.cacheDir, "temp_experiences.zip")
-                if (driveSyncManager.downloadFile(remoteBackup.id, tempZip)) {
-                    decompressFile(tempZip, dbFile.parentFile ?: File(context.filesDir, "databases"))
-                    downloaded++
-                    tempZip.delete()
-                }
-            }
-            
         } catch (e: Exception) {
-            Logger.e("BackupWorker: Error sincronizando datos", e)
+            Logger.e("BackupWorker", "Error en backup de datos", e)
         }
         
-        Pair(uploaded, downloaded)
+        backedUp
     }
 
     /**
@@ -315,21 +253,19 @@ object BackupScheduler {
             workRequest
         )
         
-        Logger.i("BackupScheduler: Sincronización periódica programada cada $repeatInterval $timeUnit")
+        Logger.i("BackupScheduler", "Backup local periódico programado cada $repeatInterval $timeUnit")
     }
     
     /**
-     * Ejecuta sincronización única inmediata.
+     * Ejecuta backup local único inmediato.
      */
-    fun runOneTimeSync(
+    fun runOneTimeBackup(
         context: Context,
-        authToken: String,
         syncModels: Boolean = true,
         syncData: Boolean = true,
         forceSync: Boolean = false
     ) {
         val inputData = workDataOf(
-            BackupWorker.KEY_AUTH_TOKEN to authToken,
             BackupWorker.KEY_SYNC_MODELS to syncModels,
             BackupWorker.KEY_SYNC_DATA to syncData,
             BackupWorker.KEY_FORCE_SYNC to forceSync
@@ -342,7 +278,7 @@ object BackupScheduler {
         
         WorkManager.getInstance(context).enqueue(workRequest)
         
-        Logger.i("BackupScheduler: Sincronización one-time programada")
+        Logger.i("BackupScheduler", "Backup local one-time programado")
     }
     
     /**
@@ -351,7 +287,7 @@ object BackupScheduler {
     fun cancelAllSync(context: Context) {
         WorkManager.getInstance(context).cancelAllWorkByTag(BackupWorker.WORK_NAME)
         WorkManager.getInstance(context).cancelAllWorkByTag(BackupWorker.ONE_TIME_WORK_NAME)
-        Logger.i("BackupScheduler: Todas las sincronizaciones canceladas")
+        Logger.i("BackupScheduler", "Todos los backups cancelados")
     }
     
     /**
