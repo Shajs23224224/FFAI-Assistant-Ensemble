@@ -50,6 +50,23 @@ jobs:
     - name: Validate Gradle wrapper
       uses: gradle/wrapper-validation-action@v2
     
+    - name: Diagnostic - Java Version
+      run: |
+        echo "Java Version:"
+        java -version
+        echo "JAVA_HOME: $JAVA_HOME"
+    
+    - name: Diagnostic - Project Structure
+      run: |
+        echo "Project files:"
+        ls -la
+        echo "---"
+        echo "App build.gradle.kts exists:"
+        test -f app/build.gradle.kts && echo "YES" || echo "NO"
+        echo "---"
+        echo "Settings.gradle.kts:"
+        cat settings.gradle.kts
+    
     - name: Build Debug APK
       if: github.event.inputs.build_type != 'release'
       run: ./gradlew assembleDebug --stacktrace
