@@ -25,3 +25,27 @@
 -keep interface okhttp3.** { *; }
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# Sistema 100% Local - Cloud classes (mantener nombres para compatibilidad)
+-keep class com.ffai.assistant.cloud.LocalSyncManager { *; }
+-keep class com.ffai.assistant.cloud.GoogleAuthManager { *; }
+-keep class com.ffai.assistant.cloud.ModelDownloader { *; }
+-keep class com.ffai.assistant.cloud.BackupWorker { *; }
+-keep class com.ffai.assistant.cloud.LocalAccount { *; }
+
+# WorkManager
+-keep class androidx.work.** { *; }
+
+# Kotlin Serialization
+-keepattributes *Annotation*
+-keep class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+
+# Remove logging calls in release builds
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+    public static *** w(...);
+    public static *** e(...);
+}

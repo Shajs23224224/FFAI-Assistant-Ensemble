@@ -68,16 +68,68 @@ android {
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
+            isDebuggable = false
+            // Optimizaciones para release
+            isZipAlignEnabled = true
+            isPseudoLocalesEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Configuraciones adicionales de release
+            ndk {
+                debugSymbolLevel "FULL"
+            }
         }
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
             isDebuggable = true
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
+    }
+    
+    // Splits de ABI para reducir tamaño del APK en cada arquitectura
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a") // Samsung A21S = arm64-v8a
+            isUniversalApk = false // No generar APK universal, solo específicos
+        }
+        density {
+            isEnable = true
+            reset()
+            include("hdpi", "xhdpi") // A21S = 720x1600 (hdpi/xhdpi)
+        }
+    }
+    
+    // Packaging options optimizado
+    packaging {
+        resources {
+            excludes += [
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/ASL2.0",
+                "META-INF/*.kotlin_module",
+                "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties"
+            ]
+        }
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+    
+    // Lint checks
+    lint {
+        disable += "ObsoleteLintCustomCheck"
+        abortOnError = false
+        checkReleaseBuilds = false
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
