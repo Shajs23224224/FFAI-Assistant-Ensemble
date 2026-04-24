@@ -71,7 +71,6 @@ android {
             isShrinkResources = true
             isDebuggable = false
             // Optimizaciones para release
-            isZipAlignEnabled = true
             isPseudoLocalesEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -79,7 +78,7 @@ android {
             )
             // Configuraciones adicionales de release
             ndk {
-                debugSymbolLevel "FULL"
+                debugSymbolLevel = "FULL"
             }
         }
         debug {
