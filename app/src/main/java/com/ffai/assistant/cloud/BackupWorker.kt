@@ -293,7 +293,7 @@ object BackupScheduler {
      */
     suspend fun isSyncInProgress(context: Context): Boolean {
         val workManager = WorkManager.getInstance(context)
-        val workInfos = workManager.getWorkInfosByTagFlowFlow(BackupWorker.ONE_TIME_WORK_).first(NAME).first()
+        val workInfos = workManager.getWorkInfosByTag(BackupWorker.ONE_TIME_WORK_NAME)
         
         return workInfos.any { 
             it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
