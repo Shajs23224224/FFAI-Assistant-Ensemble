@@ -76,10 +76,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Configuraciones adicionales de release
-            ndk {
-                debugSymbolLevel = "FULL"
-            }
         }
         debug {
             isMinifyEnabled = false
