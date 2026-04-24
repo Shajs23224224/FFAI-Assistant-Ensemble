@@ -33,6 +33,7 @@ val releaseKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
 android {
     namespace = "com.ffai.assistant"
     compileSdk = 33
+    buildToolsVersion = "33.0.2"
 
     defaultConfig {
         applicationId = "com.ffai.assistant"
