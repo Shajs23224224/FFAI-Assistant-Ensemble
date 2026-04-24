@@ -13,25 +13,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          java-version: '17'
+          distribution: 'temurin'
+          cache: none
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Ruff
-        run: |
-          ruff check tactical_ai/api tactical_ai/settings.py tactical_ai/decompiled_workspace.py tactical_ai/main.py tests
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Pytest
-        env:
-          ENVIRONMENT: test
-        run: pytest tests/ -v
+      - name: Run tests
+        run: ./gradlew test --stacktrace
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
