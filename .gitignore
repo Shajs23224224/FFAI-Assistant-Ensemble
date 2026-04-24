@@ -30,9 +30,15 @@ keystore/
 .externalNativeBuild
 .cxx/
 
+# IDE
+.cursor/
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent/AI files
+agent_memory.json
 
 # Log files
 *.log

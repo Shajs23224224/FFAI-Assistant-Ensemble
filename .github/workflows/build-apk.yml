@@ -28,18 +28,31 @@ jobs:
         fetch-depth: 0
     
     - name: Set up JDK 17
+      id: setup-java
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
-    
+
+    - name: Verify Java Version
+      run: |
+        echo "JAVA_HOME: $JAVA_HOME"
+        java -version
+        which java
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
         cmdline-tools-version: 11076708
         packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-    
+
+    - name: Verify Android SDK
+      run: |
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "SDK contents:"
+        ls -la $ANDROID_HOME 2>/dev/null || echo "ANDROID_HOME not set"
+
     - name: Cache Gradle packages
       uses: actions/cache@v4
       with:
@@ -55,13 +68,7 @@ jobs:
     
     - name: Validate Gradle wrapper
       uses: gradle/wrapper-validation-action@v2
-    
-    - name: Diagnostic - Java Version
-      run: |
-        echo "Java Version:"
-        java -version
-        echo "JAVA_HOME: $JAVA_HOME"
-    
+
     - name: Diagnostic - Project Structure
       run: |
         echo "Project files:"
@@ -76,14 +83,18 @@ jobs:
     - name: Clean and Build Debug APK
       if: github.event.inputs.build_type != 'release'
       run: |
+        echo "Using JAVA_HOME: $JAVA_HOME"
+        java -version
         ./gradlew clean
         ./gradlew assembleDebug --stacktrace
       env:
         CI: true
-    
+
     - name: Clean and Build Release APK
       if: github.event.inputs.build_type == 'release'
       run: |
+        echo "Using JAVA_HOME: $JAVA_HOME"
+        java -version
         ./gradlew clean
         ./gradlew assembleRelease --stacktrace
       env:
