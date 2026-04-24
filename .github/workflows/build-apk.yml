@@ -33,7 +33,6 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: none
 
     - name: Verify Java Version
       run: |

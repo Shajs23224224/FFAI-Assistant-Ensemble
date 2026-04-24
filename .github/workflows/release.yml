@@ -21,7 +21,6 @@ jobs:
         with:
           java-version: "21"
           distribution: "temurin"
-          cache: none
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
