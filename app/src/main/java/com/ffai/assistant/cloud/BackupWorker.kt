@@ -10,12 +10,10 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.getWorkInfosByTagFlow
 import androidx.work.workDataOf
 import com.ffai.assistant.config.Constants
 import com.ffai.assistant.utils.Logger
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -295,7 +293,7 @@ object BackupScheduler {
      */
     suspend fun isSyncInProgress(context: Context): Boolean {
         val workManager = WorkManager.getInstance(context)
-        val workInfos = workManager.getWorkInfosByTagFlow(BackupWorker.ONE_TIME_WORK_NAME).first()
+        val workInfos = workManager.getWorkInfosByTagFlowFlow(BackupWorker.ONE_TIME_WORK_).first(NAME).first()
         
         return workInfos.any { 
             it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED 
@@ -307,7 +305,7 @@ object BackupScheduler {
      */
     suspend fun getLastSyncInfo(context: Context): SyncInfo? {
         val workManager = WorkManager.getInstance(context)
-        val workInfos = workManager.getWorkInfosByTagFlow(BackupWorker.WORK_NAME).first()
+        val workInfos = workManager.getWorkInfosByTag(BackupWorker.WORK_NAME)
         
         return workInfos.lastOrNull()?.let { workInfo ->
             SyncInfo(

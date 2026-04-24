@@ -251,7 +251,7 @@ class FFAccessibilityService : AccessibilityService() {
         
         // 8. IA Avanzada Ensemble (inicialización async)
         if (useAdvancedAI) {
-            launch {
+            serviceScope.launch {
                 try {
                     advancedAICore = AdvancedAICore(
                         context = this@FFAccessibilityService,

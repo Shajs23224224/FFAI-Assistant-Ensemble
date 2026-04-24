@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import com.ffai.assistant.config.GameConfig
 import com.ffai.assistant.utils.Logger
+import kotlin.math.pow
 
 /**
  * FASE 6: PrecisionGestureController - Control fino del personaje.
